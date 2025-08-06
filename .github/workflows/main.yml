@@ -1,8 +1,8 @@
 name: My main workflow
 
 on:
-  push:
-    branches: ['*']
+  pull_request:
+    branches: [main]
 
 jobs:
   job_one:
