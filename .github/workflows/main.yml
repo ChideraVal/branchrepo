@@ -40,4 +40,11 @@ jobs:
         run: |
           echo ${{ secrets.MY_SECRET }}
           echo ${{ secrets.OUR_SECRET }}
+  
+  job_for_env:
+    runs-on: ubuntu-latest
+    environment: boys
+    steps:
+      - name: 'Print girls env secrets'
+        run: echo ${{ secrets.GIRL_CODE }}
       
