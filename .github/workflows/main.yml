@@ -24,7 +24,7 @@ jobs:
       run: cat g.txt
   
   job_three:
-  needs: job_two
+    needs: job_two
     runs-on: ubuntu-latest
     steps:
       -name: 'Job three S1'
