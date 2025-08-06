@@ -1,0 +1,43 @@
+name: My main workflow
+
+on:
+  push:
+    branches: ['*']
+
+jobs:
+  job_one:
+    runs-on: ubuntu-latest
+    steps:
+      -name: 'Job one S1'
+      run: echo 'This is Job one S1'
+
+      -name: 'Job one S2'
+      run: echo 'This is Job one S2'
+  
+  job_two:
+    runs-on: ubuntu-latest
+    steps:
+      -name: 'Job two S1'
+      run: echo 'This is Job one S1'
+
+      -name: 'Job two S2'
+      run: cat g.txt
+  
+  job_three:
+  needs: job_two
+    runs-on: ubuntu-latest
+    steps:
+      -name: 'Job three S1'
+      run: echo 'This is Job three S1'
+
+      -name: 'Job three S2'
+      run: echo 'This is Job three S2'
+
+  job_for_secrets:
+    runs-on: ubuntu-latest
+    steps:
+      -name: 'Print secrets'
+      run: |
+        echo ${{ secrets.MY_SECRET }}
+        echo ${{ secrets.OUR_SECRET }}
+      
