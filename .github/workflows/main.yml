@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 'Job two S1'
-        run: echo 'This is Job one S1'
+        run: echo 'This is Job two S1'
 
       - name: 'Job two S2'
-        run: cat g.txt
+        run: echo 'This is Job two S2'
   
   job_three:
     needs: job_two
