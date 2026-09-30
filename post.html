@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Bank Statement Poster — Prototype</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0; padding: 24px; background: #f5f6f8; color: #1a1a1a;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 24px 0 8px; color: #333; }
+  p.sub { color: #666; font-size: 13px; margin: 0 0 16px; }
+  .card {
+    background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  label { font-size: 12px; color: #555; }
+  select, input[type=file], button {
+    font-size: 13px; padding: 6px 10px; border: 1px solid #ccc;
+    border-radius: 6px; background: #fff; font-family: inherit;
+  }
+  button {
+    background: #1a1a1a; color: #fff; border: none; cursor: pointer;
+    padding: 8px 14px; font-weight: 500;
+  }
+  button:hover { background: #333; }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  th { background: #fafafa; font-weight: 600; color: #444; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tag {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    font-size: 11px; background: #eef2ff; color: #3548b3;
+  }
+  .tag.debit { background: #e8f5ec; color: #1c7a3d; }
+  .tag.credit { background: #fdecea; color: #a5322a; }
+  .tag.warn { background: #fff5e1; color: #a5721a; }
+  .muted { color: #888; font-size: 12px; }
+  .error { color: #c0392b; font-size: 13px; margin-top: 8px; }
+  .scroll { max-height: 400px; overflow: auto; border: 1px solid #eee; border-radius: 6px; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    background: #eef2ff; color: #3548b3; font-size: 11px; font-weight: 500;
+  }
+  .pill.bad { background: #fdecea; color: #a5322a; }
+  .pill.warn { background: #fff5e1; color: #a5721a; }
+</style>
+</head>
+<body>
+
+<h1>Bank Statement Poster</h1>
+<p class="sub">Upload a statement, map the columns, and it will parse → group → classify → post.</p>
+
+<!-- ============ STEP 1: UPLOAD ============ -->
+<div class="card">
+  <h2 style="margin-top:0">1. Upload Excel</h2>
+  <div class="row">
+    <div class="field">
+      <label>Bank</label>
+      <select id="bankSelect">
+        <option value="gtb">GTBank</option>
+        <option value="access">Access Bank</option>
+      </select>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+    <button id="loadBtn" disabled>Load File</button>
+  </div>
+  <div class="error" id="fileError"></div>
+</div>
+
+<!-- ============ STEP 2: MAP COLUMNS ============ -->
+<div class="card" id="mapCard" style="display:none">
+  <h2 style="margin-top:0">2. Map Columns</h2>
+  <p class="sub">Choose which column of your file maps to each field.</p>
+  <div class="row" id="mapFields"></div>
+  <div style="margin-top:12px">
+    <button id="processBtn">Process</button>
+  </div>
+</div>
+
+<!-- ============ STEP 3: SOURCE PREVIEW ============ -->
+<div class="card" id="previewCard" style="display:none">
+  <h2 style="margin-top:0">Source Preview <span class="muted" id="previewCount"></span></h2>
+  <div class="scroll" id="previewTable"></div>
+</div>
+
+<!-- ============ STEP 4: PARSED EVENTS ============ -->
+<div class="card" id="eventsCard" style="display:none">
+  <h2 style="margin-top:0">Parsed Events (before grouping) <span class="muted" id="eventsCount"></span></h2>
+  <div class="scroll" id="eventsTable"></div>
+</div>
+
+<!-- ============ STEP 5: POSTING ============ -->
+<div class="card" id="postingCard" style="display:none">
+  <h2 style="margin-top:0">Posted Journal Entries <span class="muted" id="postingCount"></span></h2>
+  <div class="scroll" id="postingTable"></div>
+</div>
+
+<!-- ============ STEP 6: TRIAL BALANCE ============ -->
+<div class="card" id="tbCard" style="display:none">
+  <h2 style="margin-top:0">Trial Balance</h2>
+  <div id="tbTable"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+// ============ STATE ============
+let workbookRows = [];
+let headers = [];
+let parsedRows = [];
+let parsedEvents = [];
+let events = [];
+let postings = [];
+
+// ============ CHART OF ACCOUNTS ============
+const CHART = {
+  "1000": { name: "Bank",                 type: "Asset" },
+  "1100": { name: "VAT Input",            type: "Asset" },
+  "4000": { name: "Sales Revenue",        type: "Revenue" },
+  "5000": { name: "Cost of Sales",        type: "Expense" },
+  "5100": { name: "Salary Expense",       type: "Expense" },
+  "5200": { name: "Fuel & Transport",     type: "Expense" },
+  "5300": { name: "Bank Charges",         type: "Expense" },
+  "5400": { name: "Airtime & Data",       type: "Expense" },
+  "5500": { name: "Rent Expense",         type: "Expense" },
+  "5600": { name: "Admin Expense",        type: "Expense" },
+  "5700": { name: "Uncategorized",        type: "Expense" }
+};
+
+// ============ 1. FILE UPLOAD ============
+const fileInput  = document.getElementById("fileInput");
+const loadBtn    = document.getElementById("loadBtn");
+const fileError  = document.getElementById("fileError");
+const bankSelect = document.getElementById("bankSelect");
+
+fileInput.addEventListener("change", () => {
+  loadBtn.disabled = !fileInput.files.length;
+  fileError.textContent = "";
+});
+
+loadBtn.addEventListener("click", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      let headerIdx = rows.findIndex(r => r.some(c => String(c).trim() !== ""));
+      if (headerIdx === -1) throw new Error("Empty file");
+      headers = rows[headerIdx].map(h => String(h).trim());
+      workbookRows = rows.slice(headerIdx + 1).filter(r =>
+        r.some(c => String(c).trim() !== "")
+      );
+      renderMapper();
+    } catch (err) {
+      fileError.textContent = "Could not read file: " + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// ============ 2. COLUMN MAPPER ============
+const mapFields = document.getElementById("mapFields");
+const mapCard   = document.getElementById("mapCard");
+
+const REQUIRED_FIELDS = [
+  { key: "date",      label: "Date" },
+  { key: "narration", label: "Transaction Details / Narration" },
+  { key: "debit",     label: "Debit / Withdrawal column" },
+  { key: "credit",    label: "Credit / Lodgement column" }
+];
+
+function renderMapper() {
+  mapCard.style.display = "block";
+  mapFields.innerHTML = "";
+  REQUIRED_FIELDS.forEach(f => {
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    const lbl = document.createElement("label");
+    lbl.textContent = f.label;
+    const sel = document.createElement("select");
+    sel.id = "map_" + f.key;
+    const guess = guessHeader(f.key);
+    headers.forEach((h, i) => {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = h || `(column ${i + 1})`;
+      if (i === guess) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    wrap.appendChild(lbl);
+    wrap.appendChild(sel);
+    mapFields.appendChild(wrap);
+  });
+}
+
+function guessHeader(field) {
+  const map = {
+    date:      ["date", "post date", "value date", "trans date"],
+    narration: ["narration", "description", "transaction details", "details", "narrative"],
+    debit:     ["debit", "debits", "withdrawal", "withdrawals", "money out", "amount out"],
+    credit:    ["credit", "credits", "lodgement", "lodgements", "deposit", "money in", "amount in"]
+  };
+  const targets = map[field] || [];
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i].toLowerCase().trim();
+    if (targets.some(t => h === t || h.includes(t))) return i;
+  }
+  return -1;
+}
+
+// ============ 3. PROCESS ============
+document.getElementById("processBtn").addEventListener("click", () => {
+  const colDate      = +document.getElementById("map_date").value;
+  const colNarration = +document.getElementById("map_narration").value;
+  const colDebit     = +document.getElementById("map_debit").value;
+  const colCredit    = +document.getElementById("map_credit").value;
+  const bank         = bankSelect.value;
+  const parser       = PARSERS[bank];
+
+  parsedRows = workbookRows.map((r, i) => {
+    const debitRaw  = parseAmount(r[colDebit]);
+    const creditRaw = parseAmount(r[colCredit]);
+    return {
+      _rowIndex: i,
+      date: r[colDate] instanceof Date ? r[colDate] : String(r[colDate] || ""),
+      narration: String(r[colNarration] || "").trim(),
+      debit: debitRaw,
+      credit: creditRaw,
+      direction: debitRaw > 0 ? "OUT" : (creditRaw > 0 ? "IN" : "NONE"),
+      amount: debitRaw > 0 ? debitRaw : creditRaw
+    };
+  }).filter(r => r.narration && r.amount > 0);
+
+  renderPreview();
+
+  parsedEvents = parsedRows.map(r => ({ ...parser(r.narration), _row: r }));
+  renderParsedEvents();
+
+  events = greedyGroup(parsedRows, parser);
+  postings = events.map(classifyEvent);
+  renderPostings();
+  renderTrialBalance();
+});
+
+function parseAmount(v) {
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return v;
+  const cleaned = String(v).replace(/[^0-9.\-]/g, "");
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+// ============ 4. PREVIEW ============
+function renderPreview() {
+  const card = document.getElementById("previewCard");
+  card.style.display = "block";
+  document.getElementById("previewCount").textContent = `(${parsedRows.length} rows)`;
+  let html = "<table><thead><tr><th>Date</th><th>Narration</th><th>Dir</th><th class='num'>Amount</th></tr></thead><tbody>";
+  parsedRows.slice(0, 100).forEach(r => {
+    html += `<tr>
+      <td>${escapeHtml(formatDate(r.date))}</td>
+      <td>${escapeHtml(r.narration)}</td>
+      <td><span class="tag ${r.direction === 'OUT' ? 'credit' : 'debit'}">${r.direction}</span></td>
+      <td class="num">${formatMoney(r.amount)}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("previewTable").innerHTML = html;
+}
+
+// ============ 5. NARRATION PARSERS ============
+function cleanName(s) {
+  return String(s)
+    .replace(/\s*-\s*\w+$/, "")
+    .replace(/\s+\d{3,}$/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function parseGTB(narration) {
+  const n = narration.toUpperCase().trim();
+
+  if (/^COMMISSION\b/.test(n))                  return { type: "COMMISSION", raw: narration };
+  if (/^VAT\b/.test(n))                         return { type: "VAT", raw: narration };
+  if (/GMS\s+ALERT\s+FEE/.test(n))              return { type: "BANK_CHARGE", raw: narration };
+  if (/SMS\s+ALERT\s+FEE/.test(n))              return { type: "BANK_CHARGE", raw: narration };
+  if (/ACCOUNT\s+MAINTENANCE\s+FEE/.test(n))    return { type: "BANK_CHARGE", raw: narration };
+  if (/FGN\s+ELECTRONIC\s+MONEY/.test(n))       return { type: "BANK_CHARGE", raw: narration };
+  if (/FGN\s+STAMP\s+DUTY/.test(n))             return { type: "BANK_CHARGE", raw: narration };
+  if (/VALUE\s+ADDED\s+TAX\s+DEDUCTION/.test(n))return { type: "VAT", raw: narration };
+
+  if (/^POS\s+PYMT/.test(n)) {
+    const m = n.match(/^POS\s+PYMT\s+\S+\s+(.+?)\s+(?:RRN|$)/);
+    return { type: "POS", merchant: m ? cleanName(m[1]) : null, raw: narration };
+  }
+
+  let m = n.match(/^TRF\/(.+?)\/FRM\s+(.+?)\s+TO\s+(.+?)(?:\s*-\s*\w+)?$/);
+  if (m) {
+    return {
+      type: "TRF",
+      description: m[1].trim(),
+      company: m[2].trim(),
+      counterparty: cleanName(m[3]),
+      narrationDirection: "OUT",
+      raw: narration
+    };
+  }
+
+  m = n.match(/^TRF\/(.+?)\/TO\s+(.+?)\s+FROM\s+(.+?)(?:\s*-\s*\w+)?$/);
+  if (m) {
+    return {
+      type: "TRF",
+      description: m[1].trim(),
+      company: m[2].trim(),
+      counterparty: cleanName(m[3]),
+      narrationDirection: "IN",
+      raw: narration
+    };
+  }
+
+  return { type: "UNKNOWN", raw: narration };
+}
+
+function parseAccess(narration) {
+  const n = narration.toUpperCase().trim();
+
+  if (/^COMMISSION\b/.test(n))                  return { type: "COMMISSION", raw: narration };
+  if (/^VAT\b/.test(n))                         return { type: "VAT", raw: narration };
+  if (/^MOBILE\s+BILLS\s+PYMT/.test(n) || /\bAIRTIME\b/.test(n))
+    return { type: "AIRTIME", raw: narration };
+
+  if (/^POS\s+PYMT/.test(n)) {
+    const m = n.match(/^POS\s+PYMT\s+\S+\s+(.+?)\s+(?:RRN|TRN|$)/);
+    return { type: "POS", merchant: m ? cleanName(m[1]) : null, raw: narration };
+  }
+
+  let m = n.match(/^MOBILE\s+TRF\s+TO\s+PAY\/\s*(.*?)\s*\/\s*(.+)$/);
+  if (m) {
+    return {
+      type: "TRF",
+      description: (m[1] || "").trim(),
+      counterparty: cleanName(m[2]),
+      narrationDirection: "OUT",
+      raw: narration
+    };
+  }
+
+  m = n.match(/^TRANSFER\s+FROM\s+(.+)$/);
+  if (m) {
+    return {
+      type: "TRF",
+      counterparty: cleanName(m[1]),
+      narrationDirection: "IN",
+      raw: narration
+    };
+  }
+
+  m = n.match(/^MOBILE\s+TRF\s+FROM\s+(.+)$/);
+  if (m) {
+    return {
+      type: "TRF",
+      counterparty: cleanName(m[1]),
+      narrationDirection: "IN",
+      raw: narration
+    };
+  }
+
+  return { type: "UNKNOWN", raw: narration };
+}
+
+const PARSERS = {
+  gtb:    parseGTB,
+  access: parseAccess
+};
+
+// ============ 6. PARSED EVENTS TABLE ============
+function renderParsedEvents() {
+  const card = document.getElementById("eventsCard");
+  card.style.display = "block";
+  document.getElementById("eventsCount").textContent = `(${parsedEvents.length} objects)`;
+
+  let html = `<table><thead><tr>
+    <th>#</th><th>Type</th><th>Counterparty</th><th>Description</th>
+    <th>Narr. Dir</th><th class="num">Amount</th><th>Bank Dir</th><th>Consistent?</th>
+  </tr></thead><tbody>`;
+
+  parsedEvents.forEach((p, i) => {
+    const row = p._row;
+    const dirMatch = p.narrationDirection
+      ? (p.narrationDirection === row.direction ? "✓" : "✗")
+      : "";
+    html += `<tr>
+      <td>${i + 1}</td>
+      <td><span class="tag">${escapeHtml(p.type)}</span></td>
+      <td>${escapeHtml(p.counterparty || "")}</td>
+      <td class="muted">${escapeHtml(p.description || p.merchant || "")}</td>
+      <td>${escapeHtml(p.narrationDirection || "")}</td>
+      <td class="num">${formatMoney(row.amount)}</td>
+      <td><span class="tag ${row.direction === 'OUT' ? 'credit' : 'debit'}">${row.direction}</span></td>
+      <td>${dirMatch}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("eventsTable").innerHTML = html;
+}
+
+// ============ 7. GREEDY GROUPING ============
+function greedyGroup(rows, parser) {
+  const parsed = rows.map(r => ({ row: r, p: parser(r.narration) }));
+  const events = [];
+  let i = 0;
+
+  while (i < parsed.length) {
+    const cur = parsed[i];
+    const type = cur.p.type;
+    const dir  = cur.row.direction;
+
+    if (!["TRF", "COMMISSION", "VAT"].includes(type) || dir !== "OUT") {
+      events.push(makeEvent(cur, []));
+      i++;
+      continue;
+    }
+
+    if (i + 2 < parsed.length) {
+      const a = parsed[i];
+      const b = parsed[i + 1];
+      const c = parsed[i + 2];
+
+      if (canGroup(a, b, c)) {
+        events.push(makeEvent(a, [b, c]));
+        i += 3;
+        continue;
+      }
+    }
+
+    events.push(makeEvent(cur, []));
+    i++;
+  }
+
+  return events;
+}
+
+function canGroup(a, b, c) {
+  const types = [a.p.type, b.p.type, c.p.type].sort();
+  if (types.join(",") !== "COMMISSION,TRF,VAT") return false;
+
+  if (formatDate(a.row.date) !== formatDate(b.row.date)) return false;
+  if (formatDate(a.row.date) !== formatDate(c.row.date)) return false;
+
+  if (b.row.direction !== "OUT") return false;
+  if (c.row.direction !== "OUT") return false;
+
+  const cps = [a.p.counterparty, b.p.counterparty, c.p.counterparty].filter(Boolean);
+  if (cps.length > 1) {
+    const first = cps[0];
+    if (!cps.every(cp => cp === first)) return false;
+  }
+
+  return true;
+}
+
+function makeEvent(anchor, extras) {
+  const rows = [anchor.row, ...extras.map(e => e.row)];
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  return {
+    anchorParsed: anchor.p,
+    anchorRow: anchor.row,
+    rows,
+    extras: extras.map(e => ({ row: e.row, p: e.p })),
+    total,
+    standalone: extras.length === 0
+  };
+}
+
+// ============ 8. CATEGORIZATION ============
+// Tier 1: direction + counterparty + description (all 3 match)
+// Tier 2: direction + counterparty
+// Tier 3: direction + description (regex)
+// Tier 4: uncategorized
+
+const RULES = [
+  // ---- Tier 1: fully-keyed ----
+  { tier: 1, direction: "OUT", counterparty: "SAMSON SEYE OBUNUKULE", description: /fuel/i,        account: "5200" },
+  { tier: 1, direction: "OUT", counterparty: "SAMSON SEYE OBUNUKULE", description: /wheel/i,       account: "5600" },
+  { tier: 1, direction: "OUT", counterparty: "SAMSON SEYE OBUNIKULE", description: /fuel/i,        account: "5200" },
+  { tier: 1, direction: "OUT", counterparty: "SAMSON SEYE OSUNKUNLE", description: /fuel|gif/i,    account: "5200" },
+  { tier: 1, direction: "OUT", counterparty: "OBASI CHUKWUMA JOHN",   description: /pumping|workmanship/i, account: "5600" },
+  { tier: 1, direction: "OUT", counterparty: "CHUKWUEKKA VICTOR OGBAUFOR", description: /waste|rubbish/i, account: "5600" },
+
+  // ---- Tier 2: direction + counterparty ----
+  { tier: 2, direction: "OUT", counterparty: "SAMSON SEYE OBUNUKULE", account: "5200" },
+  { tier: 2, direction: "OUT", counterparty: "SAMSON SEYE OBUNIKULE", account: "5200" },
+  { tier: 2, direction: "OUT", counterparty: "SAMSON SEYE OSUNKUNLE", account: "5200" },
+  { tier: 2, direction: "OUT", counterparty: "OBASI CHUKWUMA JOHN",   account: "5600" },
+  { tier: 2, direction: "OUT", counterparty: "CHUKWUEKKA VICTOR OGBAUFOR", account: "5600" },
+  { tier: 2, direction: "IN",  counterparty: "GOWON ETAKIRENU",       account: "4000" },
+
+  // ---- Tier 3: direction + description keyword ----
+  { tier: 3, direction: "OUT", description: /fuel/i,                account: "5200" },
+  { tier: 3, direction: "OUT", description: /salary/i,              account: "5100" },
+  { tier: 3, direction: "OUT", description: /rent/i,                account: "5500" },
+  { tier: 3, direction: "OUT", description: /materials/i,           account: "5000" },
+  { tier: 3, direction: "OUT", description: /waste|rubbish/i,       account: "5600" },
+  { tier: 3, direction: "OUT", description: /workmanship/i,         account: "5600" },
+  { tier: 3, direction: "OUT", description: /electricity/i,         account: "5600" },
+  { tier: 3, direction: "OUT", description: /eyedrop|water/i,       account: "5000" },
+  { tier: 3, direction: "OUT", description: /gift/i,                account: "5600" },
+  { tier: 3, direction: "IN",  description: /flour/i,               account: "4000" },
+  { tier: 3, direction: "IN",  description: /sales|invoice|allowance/i, account: "4000" }
+];
+
+function classifyTransfer(direction, counterparty, description) {
+  const sorted = [...RULES].sort((a, b) => a.tier - b.tier);
+  for (const r of sorted) {
+    if (r.direction && r.direction !== direction) continue;
+    if (r.counterparty && r.counterparty !== counterparty) continue;
+    if (r.description && !r.description.test(description || "")) continue;
+    return { account: r.account, reason: describeRule(r) };
+  }
+  return { account: "5700", reason: "no rule matched" };
+}
+
+function describeRule(r) {
+  const parts = [`tier ${r.tier}`];
+  if (r.direction)    parts.push(`dir=${r.direction}`);
+  if (r.counterparty) parts.push(`cp="${r.counterparty}"`);
+  if (r.description)  parts.push(`desc~/${r.description.source}/`);
+  return "matched " + parts.join(" ");
+}
+
+function classifyEvent(event) {
+  const p = event.anchorParsed;
+  const lines = [];
+
+  const bankSide  = event.anchorRow.direction === "OUT" ? "CREDIT" : "DEBIT";
+  const otherSide = bankSide === "CREDIT" ? "DEBIT" : "CREDIT";
+
+  // Anchor line
+  let anchorCode, anchorReason, anchorConfidence;
+  if (p.type === "TRF") {
+    const result = classifyTransfer(
+      event.anchorRow.direction,
+      p.counterparty,
+      p.description
+    );
+    anchorCode = result.account;
+    anchorReason = result.reason;
+    anchorConfidence = anchorCode === "5700" ? "low" : "medium";
+  } else if (p.type === "POS") {
+    anchorCode = "5600"; anchorReason = "POS (default: Admin)"; anchorConfidence = "medium";
+  } else if (p.type === "AIRTIME") {
+    anchorCode = "5400"; anchorReason = "airtime/data (rule)"; anchorConfidence = "high";
+  } else if (p.type === "COMMISSION") {
+    anchorCode = "5300"; anchorReason = "commission (rule)"; anchorConfidence = "high";
+  } else if (p.type === "VAT") {
+    anchorCode = "1100"; anchorReason = "VAT (rule)"; anchorConfidence = "high";
+  } else if (p.type === "BANK_CHARGE") {
+    anchorCode = "5300"; anchorReason = "bank charge (rule)"; anchorConfidence = "high";
+  } else {
+    anchorCode = "5700"; anchorReason = "unknown narration"; anchorConfidence = "low";
+  }
+
+  lines.push({
+    code: anchorCode, name: CHART[anchorCode].name,
+    side: otherSide, amount: event.anchorRow.amount,
+    reason: anchorReason, confidence: anchorConfidence
+  });
+
+  // Extras (Commission / VAT / Bank charges / TRF)
+  event.extras.forEach(({ row, p: ep }) => {
+    let code, reason, confidence = "high";
+    if (ep.type === "TRF") {
+      const result = classifyTransfer(row.direction, ep.counterparty, ep.description);
+      code = result.account;
+      reason = result.reason;
+      confidence = code === "5700" ? "low" : "medium";
+    } else if (ep.type === "COMMISSION") {
+      code = "5300"; reason = "commission (rule)";
+    } else if (ep.type === "VAT") {
+      code = "1100"; reason = "VAT on bank charge (rule)";
+    } else if (ep.type === "BANK_CHARGE") {
+      code = "5300"; reason = "bank charge (rule)";
+    } else {
+      code = "5700"; reason = "unrecognized"; confidence = "low";
+    }
+    lines.push({
+      code, name: CHART[code].name, side: otherSide, amount: row.amount,
+      reason, confidence
+    });
+  });
+
+  // Bank line
+  lines.push({
+    code: "1000", name: CHART["1000"].name,
+    side: bankSide, amount: event.total,
+    reason: `total bank movement (${event.anchorRow.direction})`,
+    confidence: "high"
+  });
+
+  // Flags
+  const flags = [];
+  if (event.standalone && p.type === "TRF" && event.anchorRow.direction === "OUT") {
+    flags.push("incomplete outgoing transfer — no fees found");
+  }
+  if (event.standalone && (p.type === "COMMISSION" || p.type === "VAT")) {
+    flags.push("orphan fee — no matching transfer found");
+  }
+  if (lines.some(l => l.code === "5700")) {
+    flags.push("uncategorized");
+  }
+
+  return {
+    event,
+    lines,
+    balanced: checkBalance(lines),
+    flags
+  };
+}
+
+function checkBalance(lines) {
+  const d = lines.filter(l => l.side === "DEBIT").reduce((s, l) => s + l.amount, 0);
+  const c = lines.filter(l => l.side === "CREDIT").reduce((s, l) => s + l.amount, 0);
+  return Math.abs(d - c) < 0.005;
+}
+
+// ============ 9. POSTINGS ============
+function renderPostings() {
+  const card = document.getElementById("postingCard");
+  card.style.display = "block";
+  document.getElementById("postingCount").textContent = `(${postings.length} events)`;
+
+  let html = "";
+  postings.forEach((post, idx) => {
+    const g = post.event;
+    const balanced = post.balanced;
+    const hasFlags = post.flags.length > 0;
+
+    html += `<div style="padding:10px;border-bottom:1px solid #eee">`;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap">`;
+    html += `<div><strong>Event ${idx + 1}</strong> · ${escapeHtml(formatDate(g.anchorRow.date))} · ${escapeHtml(g.anchorRow.narration.slice(0, 90))}${g.anchorRow.narration.length > 90 ? "…" : ""}</div>`;
+    html += `<div style="display:flex;gap:6px">`;
+    html += `<span class="pill ${balanced ? '' : 'bad'}">${balanced ? "✓ balanced" : "✗ unbalanced"}</span>`;
+    if (g.extras.length === 0 && g.anchorParsed.type === "TRF") {
+      html += `<span class="pill warn">standalone</span>`;
+    }
+    html += `</div></div>`;
+
+    html += `<table><thead><tr><th>Account</th><th>Reason</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>`;
+    post.lines.forEach(l => {
+      html += `<tr>
+        <td>${escapeHtml(l.code)} · ${escapeHtml(l.name)}</td>
+        <td class="muted">${escapeHtml(l.reason)}</td>
+        <td class="num">${l.side === "DEBIT" ? formatMoney(l.amount) : ""}</td>
+        <td class="num">${l.side === "CREDIT" ? formatMoney(l.amount) : ""}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+
+    if (hasFlags) {
+      html += `<div style="margin-top:6px;font-size:12px;color:#a5721a">⚠ ${post.flags.map(escapeHtml).join(" · ")}</div>`;
+    }
+    html += `</div>`;
+  });
+  document.getElementById("postingTable").innerHTML = html;
+}
+
+// ============ 10. TRIAL BALANCE ============
+function renderTrialBalance() {
+  const card = document.getElementById("tbCard");
+  card.style.display = "block";
+  const totals = {};
+  postings.forEach(post => {
+    post.lines.forEach(l => {
+      if (!totals[l.code]) totals[l.code] = { name: l.name, debit: 0, credit: 0 };
+      if (l.side === "DEBIT") totals[l.code].debit += l.amount;
+      else totals[l.code].credit += l.amount;
+    });
+  });
+  let html = `<table><thead><tr><th>Code</th><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>`;
+  let td = 0, tc = 0;
+  Object.entries(totals).sort().forEach(([code, t]) => {
+    const net = t.debit - t.credit;
+    const d = net > 0 ? net : 0;
+    const c = net < 0 ? -net : 0;
+    td += d; tc += c;
+    html += `<tr>
+      <td>${escapeHtml(code)}</td><td>${escapeHtml(t.name)}</td>
+      <td class="num">${d ? formatMoney(d) : ""}</td>
+      <td class="num">${c ? formatMoney(c) : ""}</td>
+    </tr>`;
+  });
+  html += `<tr style="font-weight:600;background:#fafafa">
+    <td></td><td>TOTAL</td>
+    <td class="num">${formatMoney(td)}</td>
+    <td class="num">${formatMoney(tc)}</td>
+  </tr></tbody></table>`;
+  html += `<p class="muted" style="margin-top:8px">${Math.abs(td - tc) < 0.005 ? "✓ Debits = Credits" : "✗ Out of balance"}</p>`;
+  document.getElementById("tbTable").innerHTML = html;
+}
+
+// ============ HELPERS ============
+function formatMoney(n) {
+  return n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function formatDate(d) {
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+</script>
+</body>
+</html>
