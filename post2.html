@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Bank Statement Poster</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0; padding: 24px; background: #f5f6f8; color: #1a1a1a;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: #333; }
+  h3 { font-size: 14px; }
+  p.sub { color: #666; font-size: 13px; margin: 0 0 16px; }
+  .card {
+    background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  label { font-size: 12px; color: #555; }
+  select, input[type=file], input[type=text], button {
+    font-size: 13px; padding: 6px 10px; border: 1px solid #ccc;
+    border-radius: 6px; background: #fff; font-family: inherit;
+  }
+  input[type=text] { min-width: 180px; }
+  button {
+    background: #1a1a1a; color: #fff; border: none; cursor: pointer;
+    padding: 8px 14px; font-weight: 500;
+  }
+  button:hover { background: #333; }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+  button.secondary { background: #fff; color: #1a1a1a; border: 1px solid #ccc; }
+  button.secondary:hover { background: #f0f0f0; }
+  button.danger { background: #c0392b; }
+  button.danger:hover { background: #a5322a; }
+  button.small { padding: 4px 8px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  th { background: #fafafa; font-weight: 600; color: #444; position: sticky; top: 0; z-index: 1; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: ui-monospace, monospace; }
+  .tag {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    font-size: 11px; background: #eef2ff; color: #3548b3;
+  }
+  .tag.debit { background: #e8f5ec; color: #1c7a3d; }
+  .tag.credit { background: #fdecea; color: #a5322a; }
+  .tag.warn { background: #fff5e1; color: #a5721a; }
+  .muted { color: #888; font-size: 12px; }
+  .error { color: #c0392b; font-size: 13px; margin-top: 8px; }
+  .scroll { max-height: 500px; overflow: auto; border: 1px solid #eee; border-radius: 6px; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    background: #eef2ff; color: #3548b3; font-size: 11px; font-weight: 500;
+  }
+  .pill.bad { background: #fdecea; color: #a5322a; }
+  .pill.warn { background: #fff5e1; color: #a5721a; }
+  .pill.ok { background: #e8f5ec; color: #1c7a3d; }
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap;
+    border-bottom: 1px solid #e2e4e8; padding-bottom: 0;
+  }
+  .tab {
+    padding: 8px 14px; font-size: 13px; cursor: pointer;
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    color: #666; font-weight: 500;
+  }
+  .tab:hover { color: #1a1a1a; }
+  .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4); display: flex; align-items: center;
+    justify-content: center; z-index: 1000;
+  }
+  .modal {
+    background: #fff; border-radius: 8px; padding: 20px;
+    min-width: 420px; max-width: 600px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 12px; font-size: 16px; }
+  .modal .field { margin-bottom: 12px; }
+  .modal .field label { display: block; margin-bottom: 4px; }
+  .modal .field input, .modal .field select { width: 100%; }
+  .modal-actions {
+    display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;
+  }
+  .loading-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.7); display: flex; align-items: center;
+    justify-content: center; z-index: 2000; font-size: 14px; color: #333;
+  }
+  .filter-row {
+    display: flex; gap: 12px; align-items: center; margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .filter-row input[type=text] { min-width: 240px; }
+  .flex-spread { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<h1>Bank Statement Poster</h1>
+<p class="sub">Upload a statement, map columns, review, and export.</p>
+
+<!-- ============ UPLOAD ============ -->
+<div class="card">
+  <h2>Upload Excel</h2>
+  <div class="row">
+    <div class="field">
+      <label>Bank</label>
+      <select id="bankSelect">
+        <option value="gtb">GTBank</option>
+        <option value="access">Access Bank</option>
+      </select>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+    <button id="loadBtn" disabled>Load File</button>
+  </div>
+  <div class="error" id="fileError"></div>
+</div>
+
+<!-- ============ COLUMN MAPPER ============ -->
+<div class="card" id="mapCard" style="display:none">
+  <h2>Map Columns</h2>
+  <p class="sub">Choose which column of your file maps to each field.</p>
+  <div class="row" id="mapFields"></div>
+  <div style="margin-top:12px">
+    <button id="processBtn">Process</button>
+  </div>
+</div>
+
+<!-- ============ TABS ============ -->
+<div id="tabsWrap" style="display:none">
+  <div class="tabs">
+    <button class="tab active" data-tab="source">Source</button>
+    <button class="tab" data-tab="parsed">Parsed Events</button>
+    <button class="tab" data-tab="postings">Postings</button>
+    <button class="tab" data-tab="trial">Trial Balance</button>
+    <button class="tab" data-tab="running">Running Balances</button>
+    <button class="tab" data-tab="rules">Rules</button>
+    <button class="tab" data-tab="chart">Chart of Accounts</button>
+    <button class="tab" data-tab="typemap">Type → Account</button>
+  </div>
+
+  <div class="tab-content active" id="tab-source">
+    <div class="card">
+      <div class="flex-spread">
+        <h2>Source Preview <span class="muted" id="sourceCount"></span></h2>
+        <button class="secondary small" id="exportSource">Export CSV</button>
+      </div>
+      <div class="scroll" id="sourceTable"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-parsed">
+    <div class="card">
+      <div class="flex-spread">
+        <h2>Parsed Events <span class="muted" id="parsedCount"></span></h2>
+        <button class="secondary small" id="exportParsed">Export CSV</button>
+      </div>
+      <div class="filter-row">
+        <input type="text" id="parsedSearch" placeholder="Search all columns..." />
+        <select id="parsedTypeFilter">
+          <option value="">All types</option>
+          <option value="TRF">TRF</option>
+          <option value="COMMISSION">COMMISSION</option>
+          <option value="VAT">VAT</option>
+          <option value="BANK_CHARGE">BANK_CHARGE</option>
+          <option value="POS">POS</option>
+          <option value="AIRTIME">AIRTIME</option>
+          <option value="UNKNOWN">UNKNOWN</option>
+        </select>
+        <select id="parsedDirFilter">
+          <option value="">All directions</option>
+          <option value="OUT">OUT</option>
+          <option value="IN">IN</option>
+        </select>
+      </div>
+      <div class="scroll" id="parsedTable"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-postings">
+    <div class="card">
+      <div class="flex-spread">
+        <h2>Posted Journal Entries <span class="muted" id="postingCount"></span></h2>
+        <button class="secondary small" id="exportPostings">Export CSV</button>
+      </div>
+      <div class="filter-row">
+        <select id="postingFilter">
+          <option value="all">All events</option>
+          <option value="flagged">Flagged only</option>
+          <option value="incomplete">Incomplete transfers</option>
+          <option value="orphan">Orphan fees</option>
+          <option value="uncategorized">Uncategorized</option>
+        </select>
+      </div>
+      <div class="scroll" id="postingTable"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-trial">
+    <div class="card">
+      <div class="flex-spread">
+        <h2>Trial Balance</h2>
+        <button class="secondary small" id="exportTrial">Export CSV</button>
+      </div>
+      <div id="tbTable"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-running">
+    <div class="card">
+      <div class="flex-spread">
+        <h2>Running Balances per Account</h2>
+        <button class="secondary small" id="exportRunning">Export CSV</button>
+      </div>
+      <div id="runningTables"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-rules">
+    <div class="card">
+      <div class="flex-spread">
+        <h2>Rules <span class="muted" id="rulesCount"></span></h2>
+        <button id="addRuleBtn">+ Add Rule</button>
+      </div>
+      <div class="scroll" id="rulesTable"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-chart">
+    <div class="card">
+      <div class="flex-spread">
+        <h2>Chart of Accounts <span class="muted" id="chartCount"></span></h2>
+        <button id="addChartBtn">+ Add Account</button>
+      </div>
+      <div class="scroll" id="chartTable"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-typemap">
+    <div class="card">
+      <h2>Type → Account Mapping</h2>
+      <p class="sub">Fixed types with their default accounts. Edit the account as needed.</p>
+      <div class="scroll" id="typeMapTable"></div>
+    </div>
+  </div>
+</div>
+
+<div id="modalContainer"></div>
+<div id="loadingOverlay" class="loading-overlay" style="display:none">Processing...</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+// ================================================================
+// STATE
+// ================================================================
+let workbookRows = [];
+let headers = [];
+let parsedRows = [];
+let parsedEvents = [];
+let groups = [];
+let postings = [];
+let trialBalance = {};
+let runningBalances = {};
+
+let chart = {
+  "1000": { name: "Bank",                 type: "Asset" },
+  "1100": { name: "VAT Input",            type: "Asset" },
+  "4000": { name: "Sales Revenue",        type: "Revenue" },
+  "5000": { name: "Cost of Sales",        type: "Expense" },
+  "5100": { name: "Salary Expense",       type: "Expense" },
+  "5200": { name: "Fuel & Transport",     type: "Expense" },
+  "5300": { name: "Bank Charges",         type: "Expense" },
+  "5400": { name: "Airtime & Data",       type: "Expense" },
+  "5500": { name: "Rent Expense",         type: "Expense" },
+  "5600": { name: "Admin Expense",        type: "Expense" },
+  "5700": { name: "Uncategorized",        type: "Expense" }
+};
+
+let rules = [
+  { id: "r1", direction: "OUT", counterparty: "SAMSON SEYE OBUNUKULE", descriptionPattern: "fuel", descriptionMatchType: "substring", account: "5200" },
+  { id: "r2", direction: "OUT", counterparty: "SAMSON SEYE OBUNUKULE", descriptionPattern: "wheel", descriptionMatchType: "substring", account: "5600" },
+  { id: "r3", direction: "OUT", counterparty: "SAMSON SEYE OBUNIKULE", descriptionPattern: "fuel", descriptionMatchType: "substring", account: "5200" },
+  { id: "r4", direction: "OUT", counterparty: "SAMSON SEYE OSUNKUNLE", descriptionPattern: "fuel", descriptionMatchType: "substring", account: "5200" },
+  { id: "r5", direction: "OUT", counterparty: "OBASI CHUKWUMA JOHN",   descriptionPattern: "pumping", descriptionMatchType: "substring", account: "5600" },
+  { id: "r6", direction: "OUT", counterparty: "CHUKWUEKKA VICTOR OGBAUFOR", descriptionPattern: "waste", descriptionMatchType: "substring", account: "5600" },
+  { id: "r7", direction: "OUT", counterparty: "SAMSON SEYE OBUNUKULE", account: "5200" },
+  { id: "r8", direction: "OUT", counterparty: "SAMSON SEYE OBUNIKULE", account: "5200" },
+  { id: "r9", direction: "OUT", counterparty: "SAMSON SEYE OSUNKUNLE", account: "5200" },
+  { id: "r10", direction: "OUT", counterparty: "OBASI CHUKWUMA JOHN",   account: "5600" },
+  { id: "r11", direction: "OUT", counterparty: "CHUKWUEKKA VICTOR OGBAUFOR", account: "5600" },
+  { id: "r12", direction: "IN",  counterparty: "GOWON ETAKIRENU",       account: "4000" },
+  { id: "r13", direction: "OUT", descriptionPattern: "fuel", descriptionMatchType: "substring", account: "5200" },
+  { id: "r14", direction: "OUT", descriptionPattern: "salary", descriptionMatchType: "substring", account: "5100" },
+  { id: "r15", direction: "OUT", descriptionPattern: "rent", descriptionMatchType: "substring", account: "5500" },
+  { id: "r16", direction: "OUT", descriptionPattern: "materials", descriptionMatchType: "substring", account: "5000" },
+  { id: "r17", direction: "OUT", descriptionPattern: "waste", descriptionMatchType: "substring", account: "5600" },
+  { id: "r18", direction: "OUT", descriptionPattern: "workmanship", descriptionMatchType: "substring", account: "5600" },
+  { id: "r19", direction: "OUT", descriptionPattern: "electricity", descriptionMatchType: "substring", account: "5600" },
+  { id: "r20", direction: "OUT", descriptionPattern: "eyedrop", descriptionMatchType: "substring", account: "5000" },
+  { id: "r21", direction: "OUT", descriptionPattern: "gift", descriptionMatchType: "substring", account: "5600" },
+  { id: "r22", direction: "IN",  descriptionPattern: "flour", descriptionMatchType: "substring", account: "4000" },
+  { id: "r23", direction: "IN",  descriptionPattern: "invoice", descriptionMatchType: "substring", account: "4000" }
+];
+
+let typeMap = {
+  "COMMISSION":  "5300",
+  "VAT":         "1100",
+  "BANK_CHARGE": "5300",
+  "POS":         "5600",
+  "AIRTIME":     "5400",
+  "UNKNOWN":     "5700"
+};
+
+const EVENT_TYPES = ["TRF", "COMMISSION", "VAT", "BANK_CHARGE", "POS", "AIRTIME", "UNKNOWN"];
+const ACCOUNT_TYPES = ["Asset", "Liability", "Equity", "Revenue", "Expense"];
+
+let nextRuleId = 24;
+
+// ================================================================
+// TABS
+// ================================================================
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+  });
+});
+
+// ================================================================
+// HELPERS
+// ================================================================
+function parseAmount(v) {
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return v;
+  const cleaned = String(v).replace(/[^0-9.\-]/g, "");
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+function formatMoney(n) {
+  return Number(n).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function formatDate(d) {
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+function cleanName(s) {
+  return String(s)
+    .replace(/\s*-\s*\w+$/, "")
+    .replace(/\s+\d{3,}$/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+// ================================================================
+// PIPELINE
+// ================================================================
+function recomputeFull() {
+  groups = greedyGroup(parsedRows, parsedEvents);
+  postings = groups.map(classifyEvent);
+  renderPostings();
+  renderTrialBalance();
+  renderRunningBalances();
+}
+
+function recomputeClassifyOnly() {
+  postings = groups.map(classifyEvent);
+  renderPostings();
+  renderTrialBalance();
+  renderRunningBalances();
+}
+
+function recomputeEverything() {
+  recomputeFull();
+}
+
+// ================================================================
+// NARRATION PARSERS
+// ================================================================
+function parseGTB(narration) {
+  const n = narration.toUpperCase().trim();
+
+  if (/^COMMISSION\b/.test(n))                   return { type: "COMMISSION", raw: narration };
+  if (/^VAT\b/.test(n))                          return { type: "VAT", raw: narration };
+  if (/GMS\s+ALERT\s+FEE/.test(n))               return { type: "BANK_CHARGE", raw: narration };
+  if (/SMS\s+ALERT\s+FEE/.test(n))               return { type: "BANK_CHARGE", raw: narration };
+  if (/ACCOUNT\s+MAINTENANCE\s+FEE/.test(n))     return { type: "BANK_CHARGE", raw: narration };
+  if (/FGN\s+ELECTRONIC\s+MONEY/.test(n))        return { type: "BANK_CHARGE", raw: narration };
+  if (/FGN\s+STAMP\s+DUTY/.test(n))              return { type: "BANK_CHARGE", raw: narration };
+  if (/VALUE\s+ADDED\s+TAX\s+DEDUCTION/.test(n)) return { type: "VAT", raw: narration };
+
+  if (/^POS\s+PYMT/.test(n)) {
+    const m = n.match(/^POS\s+PYMT\s+\S+\s+(.+?)\s+(?:RRN|$)/);
+    return { type: "POS", merchant: m ? cleanName(m[1]) : null, raw: narration };
+  }
+
+  let m = n.match(/^TRF\/(.+?)\/FRM\s+(.+?)\s+TO\s+(.+?)(?:\s*-\s*\w+)?$/);
+  if (m) {
+    return {
+      type: "TRF",
+      description: m[1].trim(),
+      company: m[2].trim(),
+      counterparty: cleanName(m[3]),
+      narrationDirection: "OUT",
+      raw: narration
+    };
+  }
+
+  m = n.match(/^TRF\/(.+?)\/TO\s+(.+?)\s+FROM\s+(.+?)(?:\s*-\s*\w+)?$/);
+  if (m) {
+    return {
+      type: "TRF",
+      description: m[1].trim(),
+      company: m[2].trim(),
+      counterparty: cleanName(m[3]),
+      narrationDirection: "IN",
+      raw: narration
+    };
+  }
+
+  return { type: "UNKNOWN", raw: narration };
+}
+
+function parseAccess(narration) {
+  const n = narration.toUpperCase().trim();
+
+  if (/^COMMISSION\b/.test(n))                   return { type: "COMMISSION", raw: narration };
+  if (/^VAT\b/.test(n))                          return { type: "VAT", raw: narration };
+  if (/^MOBILE\s+BILLS\s+PYMT/.test(n) || /\bAIRTIME\b/.test(n))
+    return { type: "AIRTIME", raw: narration };
+
+  if (/^POS\s+PYMT/.test(n)) {
+    const m = n.match(/^POS\s+PYMT\s+\S+\s+(.+?)\s+(?:RRN|TRN|$)/);
+    return { type: "POS", merchant: m ? cleanName(m[1]) : null, raw: narration };
+  }
+
+  let m = n.match(/^MOBILE\s+TRF\s+TO\s+PAY\/\s*(.*?)\s*\/\s*(.+)$/);
+  if (m) {
+    return {
+      type: "TRF",
+      description: (m[1] || "").trim(),
+      counterparty: cleanName(m[2]),
+      narrationDirection: "OUT",
+      raw: narration
+    };
+  }
+
+  m = n.match(/^TRANSFER\s+FROM\s+(.+)$/);
+  if (m) {
+    return {
+      type: "TRF",
+      counterparty: cleanName(m[1]),
+      narrationDirection: "IN",
+      raw: narration
+    };
+  }
+
+  m = n.match(/^MOBILE\s+TRF\s+FROM\s+(.+)$/);
+  if (m) {
+    return {
+      type: "TRF",
+      counterparty: cleanName(m[1]),
+      narrationDirection: "IN",
+      raw: narration
+    };
+  }
+
+  return { type: "UNKNOWN", raw: narration };
+}
+
+const PARSERS = {
+  gtb: parseGTB,
+  access: parseAccess
+};
+
+// ================================================================
+// GROUPING
+// ================================================================
+function greedyGroup(rows, events) {
+  const out = [];
+  let i = 0;
+
+  while (i < rows.length) {
+    const cur = events[i];
+    const dir = rows[i].direction;
+
+    if (!["TRF", "COMMISSION", "VAT"].includes(cur.type) || dir !== "OUT") {
+      out.push(makeGroup(rows, events, i, []));
+      i++;
+      continue;
+    }
+
+    if (i + 2 < rows.length) {
+      const a = i, b = i + 1, c = i + 2;
+      if (canGroup(rows, events, a, b, c)) {
+        out.push(makeGroup(rows, events, a, [b, c]));
+        i += 3;
+        continue;
+      }
+    }
+
+    out.push(makeGroup(rows, events, i, []));
+    i++;
+  }
+
+  return out;
+}
+
+function canGroup(rows, events, a, b, c) {
+  const types = [events[a].type, events[b].type, events[c].type].sort();
+  if (types.join(",") !== "COMMISSION,TRF,VAT") return false;
+
+  if (formatDate(rows[a].date) !== formatDate(rows[b].date)) return false;
+  if (formatDate(rows[a].date) !== formatDate(rows[c].date)) return false;
+
+  if (rows[b].direction !== "OUT") return false;
+  if (rows[c].direction !== "OUT") return false;
+
+  const cps = [events[a].counterparty, events[b].counterparty, events[c].counterparty].filter(Boolean);
+  if (cps.length > 1) {
+    const first = cps[0];
+    if (!cps.every(cp => cp === first)) return false;
+  }
+  return true;
+}
+
+function makeGroup(rows, events, anchorIdx, extraIdxs) {
+  const allIdxs = [anchorIdx, ...extraIdxs];
+  const total = allIdxs.reduce((s, k) => s + rows[k].amount, 0);
+  return {
+    anchorIdx,
+    anchorRow: rows[anchorIdx],
+    anchorEvent: events[anchorIdx],
+    extras: extraIdxs.map(k => ({ idx: k, row: rows[k], event: events[k] })),
+    rows: allIdxs.map(k => rows[k]),
+    total,
+    standalone: extraIdxs.length === 0
+  };
+}
+
+// ================================================================
+// CATEGORIZATION
+// ================================================================
+function ruleTier(r) {
+  const hasCp = r.counterparty && r.counterparty.length > 0;
+  const hasDesc = r.descriptionPattern && r.descriptionPattern.length > 0;
+  if (hasCp && hasDesc) return 1;
+  if (hasCp) return 2;
+  if (hasDesc) return 3;
+  return 4;
+}
+
+function ruleMatches(r, direction, counterparty, description) {
+  if (r.direction !== direction) return false;
+
+  if (r.counterparty && r.counterparty.length > 0) {
+    if (r.counterparty !== counterparty) return false;
+  }
+
+  if (r.descriptionPattern && r.descriptionPattern.length > 0) {
+    const desc = description || "";
+    if (r.descriptionMatchType === "regex") {
+      try {
+        const re = new RegExp(r.descriptionPattern, "i");
+        if (!re.test(desc)) return false;
+      } catch (e) {
+        return false;
+      }
+    } else {
+      if (!desc.toLowerCase().includes(r.descriptionPattern.toLowerCase())) return false;
+    }
+  }
+
+  return true;
+}
+
+function classifyTransfer(direction, counterparty, description) {
+  const sorted = [...rules].sort((a, b) => ruleTier(a) - ruleTier(b));
+  for (const r of sorted) {
+    if (ruleMatches(r, direction, counterparty, description)) {
+      return { account: r.account, reason: describeRule(r) };
+    }
+  }
+  return { account: "5700", reason: "no rule matched" };
+}
+
+function describeRule(r) {
+  const parts = [`tier ${ruleTier(r)}`];
+  if (r.direction) parts.push(`dir=${r.direction}`);
+  if (r.counterparty) parts.push(`cp="${r.counterparty}"`);
+  if (r.descriptionPattern) parts.push(`desc~"${r.descriptionPattern}"`);
+  return "matched " + parts.join(" ");
+}
+
+function classifyEvent(group) {
+  const p = group.anchorEvent;
+  const lines = [];
+
+  const bankSide = group.anchorRow.direction === "OUT" ? "CREDIT" : "DEBIT";
+  const otherSide = bankSide === "CREDIT" ? "DEBIT" : "CREDIT";
+
+  let anchorCode, anchorReason, anchorConfidence;
+
+  if (p.type === "TRF") {
+    const result = classifyTransfer(group.anchorRow.direction, p.counterparty, p.description);
+    anchorCode = result.account;
+    anchorReason = result.reason;
+    anchorConfidence = anchorCode === "5700" ? "low" : "medium";
+  } else {
+    const mapped = typeMap[p.type] || "5700";
+    anchorCode = mapped;
+    anchorReason = `${p.type} → ${mapped} (type mapping)`;
+    anchorConfidence = "high";
+  }
+
+  lines.push({
+    code: anchorCode,
+    name: (chart[anchorCode] || {}).name || "?",
+    side: otherSide,
+    amount: group.anchorRow.amount,
+    reason: anchorReason,
+    confidence: anchorConfidence,
+    rowNum: group.anchorIdx + 1
+  });
+
+  group.extras.forEach(({ idx, row, event }) => {
+    let code, reason, confidence = "high";
+    if (event.type === "TRF") {
+      const result = classifyTransfer(row.direction, event.counterparty, event.description);
+      code = result.account;
+      reason = result.reason;
+      confidence = code === "5700" ? "low" : "medium";
+    } else {
+      const mapped = typeMap[event.type] || "5700";
+      code = mapped;
+      reason = `${event.type} → ${mapped} (type mapping)`;
+    }
+    lines.push({
+      code,
+      name: (chart[code] || {}).name || "?",
+      side: otherSide,
+      amount: row.amount,
+      reason,
+      confidence,
+      rowNum: idx + 1
+    });
+  });
+
+  lines.push({
+    code: "1000",
+    name: (chart["1000"] || {}).name || "Bank",
+    side: bankSide,
+    amount: group.total,
+    reason: `total bank movement (${group.anchorRow.direction})`,
+    confidence: "high",
+    rowNum: group.rows.length === 1
+      ? (group.anchorIdx + 1)
+      : `${group.anchorIdx + 1}–${group.anchorIdx + group.rows.length}`
+  });
+
+  const flags = [];
+  if (group.standalone && p.type === "TRF" && group.anchorRow.direction === "OUT") {
+    flags.push("incomplete-outgoing");
+  }
+  if (group.standalone && (p.type === "COMMISSION" || p.type === "VAT")) {
+    flags.push("orphan-fee");
+  }
+  if (lines.some(l => l.code === "5700")) {
+    flags.push("uncategorized");
+  }
+
+  return {
+    group,
+    lines,
+    balanced: checkBalance(lines),
+    flags
+  };
+}
+
+function checkBalance(lines) {
+  const d = lines.filter(l => l.side === "DEBIT").reduce((s, l) => s + l.amount, 0);
+  const c = lines.filter(l => l.side === "CREDIT").reduce((s, l) => s + l.amount, 0);
+  return Math.abs(d - c) < 0.005;
+}
+
+// ================================================================
+// RENDERERS
+// ================================================================
+function renderSourceTable() {
+  document.getElementById("sourceCount").textContent = `(${parsedRows.length} rows)`;
+  let html = "<table><thead><tr><th>#</th><th>Date</th><th>Narration</th><th>Dir</th><th class='num'>Amount</th></tr></thead><tbody>";
+  parsedRows.forEach((r, i) => {
+    html += `<tr>
+      <td class="mono">${i + 1}</td>
+      <td>${escapeHtml(formatDate(r.date))}</td>
+      <td>${escapeHtml(r.narration)}</td>
+      <td><span class="tag ${r.direction === 'OUT' ? 'credit' : 'debit'}">${r.direction}</span></td>
+      <td class="num">${formatMoney(r.amount)}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("sourceTable").innerHTML = html;
+}
+
+function renderParsedTable() {
+  const search = (document.getElementById("parsedSearch").value || "").toLowerCase();
+  const typeFilter = document.getElementById("parsedTypeFilter").value;
+  const dirFilter = document.getElementById("parsedDirFilter").value;
+
+  const filtered = parsedRows.map((row, i) => ({ row, event: parsedEvents[i], idx: i }))
+    .filter(({ row, event }) => {
+      if (typeFilter && event.type !== typeFilter) return false;
+      if (dirFilter && row.direction !== dirFilter) return false;
+      if (search) {
+        const haystack = [
+          row.date, row.narration, row.direction, event.type,
+          event.counterparty || "", event.description || "", event.merchant || ""
+        ].join(" ").toLowerCase();
+        if (!haystack.includes(search)) return false;
+      }
+      return true;
+    });
+
+  document.getElementById("parsedCount").textContent = `(${filtered.length} of ${parsedRows.length})`;
+
+  let html = `<table><thead><tr>
+    <th>#</th><th>Date</th><th>Type</th><th>Counterparty</th><th>Description</th>
+    <th>Dir</th><th class="num">Amount</th><th>Consistent</th><th></th>
+  </tr></thead><tbody>`;
+
+  filtered.forEach(({ row, event, idx }) => {
+    const dirMatch = event.narrationDirection
+      ? (event.narrationDirection === row.direction ? "✓" : "✗")
+      : "";
+    html += `<tr>
+      <td class="mono">${idx + 1}</td>
+      <td>${escapeHtml(formatDate(row.date))}</td>
+      <td><span class="tag">${escapeHtml(event.type)}</span></td>
+      <td>${escapeHtml(event.counterparty || "")}</td>
+      <td class="muted">${escapeHtml(event.description || event.merchant || "")}</td>
+      <td><span class="tag ${row.direction === 'OUT' ? 'credit' : 'debit'}">${row.direction}</span></td>
+      <td class="num">${formatMoney(row.amount)}</td>
+      <td>${dirMatch}</td>
+      <td><button class="secondary small" onclick="openParsedModal(${idx})">Edit</button></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("parsedTable").innerHTML = html;
+}
+
+function renderPostings() {
+  const filter = document.getElementById("postingFilter").value;
+
+  const filtered = postings.filter(p => {
+    if (filter === "all") return true;
+    if (filter === "flagged") return p.flags.length > 0;
+    if (filter === "incomplete") return p.flags.includes("incomplete-outgoing");
+    if (filter === "orphan") return p.flags.includes("orphan-fee");
+    if (filter === "uncategorized") return p.flags.includes("uncategorized");
+    return true;
+  });
+
+  document.getElementById("postingCount").textContent = `(${filtered.length} of ${postings.length})`;
+
+  let html = "";
+  filtered.forEach((post, idx) => {
+    const g = post.group;
+    const hasFlags = post.flags.length > 0;
+    const anchorRowNum = g.anchorIdx + 1;
+
+    html += `<div style="padding:10px;border-bottom:1px solid #eee${hasFlags ? ';background:#fffdf6' : ''}">`;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap">`;
+    html += `<div><strong>Event</strong> · ${escapeHtml(formatDate(g.anchorRow.date))} · rows ${g.rows.length === 1 ? anchorRowNum : `${anchorRowNum}–${anchorRowNum + g.rows.length - 1}`} · ${escapeHtml(g.anchorRow.narration.slice(0, 90))}${g.anchorRow.narration.length > 90 ? "…" : ""}</div>`;
+    html += `<div style="display:flex;gap:6px">`;
+    html += `<span class="pill ${post.balanced ? 'ok' : 'bad'}">${post.balanced ? "✓ balanced" : "✗ unbalanced"}</span>`;
+    if (g.extras.length === 0 && g.anchorEvent.type === "TRF" && g.anchorRow.direction === "OUT") {
+      html += `<span class="pill warn">standalone</span>`;
+    }
+    html += `</div></div>`;
+
+    html += `<table><thead><tr><th>Account</th><th>Reason</th><th>Row</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>`;
+    post.lines.forEach(l => {
+      html += `<tr>
+        <td>${escapeHtml(l.code)} · ${escapeHtml(l.name)}</td>
+        <td class="muted">${escapeHtml(l.reason)}</td>
+        <td class="mono">${escapeHtml(String(l.rowNum))}</td>
+        <td class="num">${l.side === "DEBIT" ? formatMoney(l.amount) : ""}</td>
+        <td class="num">${l.side === "CREDIT" ? formatMoney(l.amount) : ""}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+
+    if (hasFlags) {
+      const labels = post.flags.map(f => ({
+        "incomplete-outgoing": "incomplete outgoing transfer",
+        "orphan-fee": "orphan fee",
+        "uncategorized": "uncategorized"
+      }[f] || f));
+      html += `<div style="margin-top:6px;font-size:12px;color:#a5721a">⚠ ${labels.map(escapeHtml).join(" · ")}</div>`;
+    }
+    html += `</div>`;
+  });
+
+  document.getElementById("postingTable").innerHTML = html;
+}
+
+function renderTrialBalance() {
+  const totals = {};
+  postings.forEach(post => {
+    post.lines.forEach(l => {
+      if (!totals[l.code]) totals[l.code] = { name: l.name, debit: 0, credit: 0 };
+      if (l.side === "DEBIT") totals[l.code].debit += l.amount;
+      else totals[l.code].credit += l.amount;
+    });
+  });
+  trialBalance = totals;
+
+  let html = `<table><thead><tr><th>Code</th><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody>`;
+  let td = 0, tc = 0;
+  Object.entries(totals).sort().forEach(([code, t]) => {
+    const net = t.debit - t.credit;
+    const d = net > 0 ? net : 0;
+    const c = net < 0 ? -net : 0;
+    td += d; tc += c;
+    html += `<tr>
+      <td class="mono">${escapeHtml(code)}</td>
+      <td>${escapeHtml(t.name)}</td>
+      <td class="num">${d ? formatMoney(d) : ""}</td>
+      <td class="num">${c ? formatMoney(c) : ""}</td>
+    </tr>`;
+  });
+  html += `<tr style="font-weight:600;background:#fafafa">
+    <td></td><td>TOTAL</td>
+    <td class="num">${formatMoney(td)}</td>
+    <td class="num">${formatMoney(tc)}</td>
+  </tr></tbody></table>`;
+  html += `<p class="muted" style="margin-top:8px">${Math.abs(td - tc) < 0.005 ? "✓ Debits = Credits" : "✗ Out of balance"}</p>`;
+  document.getElementById("tbTable").innerHTML = html;
+}
+
+function renderRunningBalances() {
+  const ledger = {};
+
+  postings.forEach(post => {
+    const date = formatDate(post.group.anchorRow.date);
+    const rowNum = post.group.anchorIdx + 1;
+    const orderedLines = [...post.lines].sort((a, b) => {
+      if (a.code === "1000" && b.code !== "1000") return 1;
+      if (b.code === "1000" && a.code !== "1000") return -1;
+      return 0;
+    });
+    orderedLines.forEach(l => {
+      if (!ledger[l.code]) ledger[l.code] = { name: l.name, entries: [], balance: 0 };
+      const isHomeSide = ["Asset", "Expense"].includes((chart[l.code] || {}).type);
+      const delta = l.side === "DEBIT" ? l.amount : -l.amount;
+      const signedDelta = isHomeSide ? delta : -delta;
+      ledger[l.code].balance += signedDelta;
+      ledger[l.code].entries.push({
+        date,
+        rowNum,
+        debit: l.side === "DEBIT" ? l.amount : 0,
+        credit: l.side === "CREDIT" ? l.amount : 0,
+        balance: ledger[l.code].balance,
+        reason: l.reason
+      });
+    });
+  });
+
+  runningBalances = ledger;
+
+  const codes = Object.keys(ledger).sort();
+  let html = "";
+  codes.forEach(code => {
+    const acct = ledger[code];
+    const meta = chart[code] || { name: acct.name, type: "?" };
+    html += `<div style="margin-bottom:24px">`;
+    html += `<h3 style="margin:0 0 8px">${escapeHtml(code)} · ${escapeHtml(meta.name)} <span class="muted">(${escapeHtml(meta.type)})</span></h3>`;
+    html += `<div class="scroll" style="max-height:300px"><table><thead><tr>
+      <th>Date</th><th>Row</th><th>Reason</th>
+      <th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th>
+    </tr></thead><tbody>`;
+    acct.entries.forEach(e => {
+      html += `<tr>
+        <td>${escapeHtml(e.date)}</td>
+        <td class="mono">${escapeHtml(String(e.rowNum))}</td>
+        <td class="muted">${escapeHtml(e.reason)}</td>
+        <td class="num">${e.debit ? formatMoney(e.debit) : ""}</td>
+        <td class="num">${e.credit ? formatMoney(e.credit) : ""}</td>
+        <td class="num"><strong>${formatMoney(e.balance)}</strong></td>
+      </tr>`;
+    });
+    html += `</tbody></table></div></div>`;
+  });
+  document.getElementById("runningTables").innerHTML = html || "<p class='muted'>No postings yet.</p>";
+}
+
+function renderRulesTable() {
+  document.getElementById("rulesCount").textContent = `(${rules.length})`;
+  const sorted = [...rules].sort((a, b) => ruleTier(a) - ruleTier(b));
+
+  let html = `<table><thead><tr>
+    <th>Tier</th><th>Direction</th><th>Counterparty</th><th>Description</th>
+    <th>Match</th><th>Account</th><th></th>
+  </tr></thead><tbody>`;
+
+  sorted.forEach(r => {
+    const tier = ruleTier(r);
+    const acct = chart[r.account] || { name: "?" };
+    html += `<tr>
+      <td>${tier}</td>
+      <td><span class="tag ${r.direction === 'OUT' ? 'credit' : 'debit'}">${r.direction}</span></td>
+      <td>${escapeHtml(r.counterparty || "")}</td>
+      <td class="muted">${escapeHtml(r.descriptionPattern || "")}</td>
+      <td class="muted">${escapeHtml(r.descriptionMatchType || "-")}</td>
+      <td>${escapeHtml(r.account)} · ${escapeHtml(acct.name)}</td>
+      <td>
+        <button class="secondary small" onclick="openRuleModal('${r.id}')">Edit</button>
+        <button class="danger small" onclick="deleteRule('${r.id}')">Delete</button>
+      </td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("rulesTable").innerHTML = html;
+}
+
+function renderChartTable() {
+  document.getElementById("chartCount").textContent = `(${Object.keys(chart).length})`;
+  const codes = Object.keys(chart).sort();
+
+  let html = `<table><thead><tr>
+    <th>Code</th><th>Name</th><th>Type</th><th></th>
+  </tr></thead><tbody>`;
+
+  codes.forEach(code => {
+    const a = chart[code];
+    html += `<tr>
+      <td class="mono">${escapeHtml(code)}</td>
+      <td>${escapeHtml(a.name)}</td>
+      <td>${escapeHtml(a.type)}</td>
+      <td>
+        <button class="secondary small" onclick="openChartModal('${code}')">Edit</button>
+        <button class="danger small" onclick="deleteChartAccount('${code}')">Delete</button>
+      </td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("chartTable").innerHTML = html;
+}
+
+function renderTypeMapTable() {
+  const types = Object.keys(typeMap);
+  let html = `<table><thead><tr>
+    <th>Type</th><th>Account</th><th></th>
+  </tr></thead><tbody>`;
+
+  types.forEach(t => {
+    const code = typeMap[t];
+    const acct = chart[code] || { name: "?" };
+    html += `<tr>
+      <td><span class="tag">${escapeHtml(t)}</span></td>
+      <td>${escapeHtml(code)} · ${escapeHtml(acct.name)}</td>
+      <td><button class="secondary small" onclick="openTypeMapModal('${t}')">Edit</button></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("typeMapTable").innerHTML = html;
+}
+
+// ================================================================
+// MODALS
+// ================================================================
+function showModal(html) {
+  const container = document.getElementById("modalContainer");
+  container.innerHTML = `<div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modalBox">${html}</div>
+  </div>`;
+  document.getElementById("modalOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "modalOverlay") closeModal();
+  });
+}
+
+function closeModal() {
+  document.getElementById("modalContainer").innerHTML = "";
+}
+
+// ---- Rule modal ----
+function openRuleModal(ruleId) {
+  const isNew = !ruleId;
+  const rule = isNew
+    ? { direction: "OUT", counterparty: "", descriptionPattern: "", descriptionMatchType: "substring", account: Object.keys(chart)[0] }
+    : rules.find(r => r.id === ruleId);
+
+  const accountOptions = Object.keys(chart).sort()
+    .map(code => `<option value="${code}" ${code === rule.account ? "selected" : ""}>${code} · ${escapeHtml(chart[code].name)}</option>`)
+    .join("");
+
+  showModal(`
+    <h3>${isNew ? "Add Rule" : "Edit Rule"}</h3>
+    <div class="field">
+      <label>Direction *</label>
+      <select id="mRuleDir">
+        <option value="OUT" ${rule.direction === "OUT" ? "selected" : ""}>OUT</option>
+        <option value="IN"  ${rule.direction === "IN"  ? "selected" : ""}>IN</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Counterparty (optional)</label>
+      <input type="text" id="mRuleCp" value="${escapeHtml(rule.counterparty || "")}" placeholder="e.g. SAMSON SEYE OBUNUKULE" />
+    </div>
+    <div class="field">
+      <label>Description (optional)</label>
+      <input type="text" id="mRuleDesc" value="${escapeHtml(rule.descriptionPattern || "")}" placeholder="e.g. fuel" />
+    </div>
+    <div class="field">
+      <label>Description match type</label>
+      <select id="mRuleDescType">
+        <option value="substring" ${rule.descriptionMatchType !== "regex" ? "selected" : ""}>Substring (contains)</option>
+        <option value="regex"     ${rule.descriptionMatchType === "regex" ? "selected" : ""}>Regex</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Account *</label>
+      <select id="mRuleAcct">${accountOptions}</select>
+    </div>
+    <div id="mRuleError" class="error"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button onclick="saveRule('${ruleId || ""}')">Save</button>
+    </div>
+  `);
+}
+
+function saveRule(ruleId) {
+  const direction = document.getElementById("mRuleDir").value;
+  const counterparty = document.getElementById("mRuleCp").value.trim().toUpperCase();
+  const descriptionPattern = document.getElementById("mRuleDesc").value.trim();
+  const descriptionMatchType = document.getElementById("mRuleDescType").value;
+  const account = document.getElementById("mRuleAcct").value;
+  const errEl = document.getElementById("mRuleError");
+
+  if (!direction) { errEl.textContent = "Direction is required."; return; }
+  if (!account)   { errEl.textContent = "Account is required."; return; }
+  if (!chart[account]) { errEl.textContent = "Invalid account."; return; }
+
+  if (descriptionMatchType === "regex" && descriptionPattern) {
+    try { new RegExp(descriptionPattern); }
+    catch (e) { errEl.textContent = "Invalid regex: " + e.message; return; }
+  }
+
+  const duplicate = rules.find(r =>
+    r.id !== ruleId &&
+    r.direction === direction &&
+    (r.counterparty || "") === counterparty &&
+    (r.descriptionPattern || "") === descriptionPattern
+  );
+  if (duplicate) {
+    errEl.textContent = "A rule with the same direction, counterparty, and description already exists.";
+    return;
+  }
+
+  if (ruleId) {
+    const r = rules.find(r => r.id === ruleId);
+    Object.assign(r, { direction, counterparty, descriptionPattern, descriptionMatchType, account });
+  } else {
+    rules.push({
+      id: "r" + (nextRuleId++),
+      direction, counterparty, descriptionPattern, descriptionMatchType, account
+    });
+  }
+
+  closeModal();
+  renderRulesTable();
+  recomputeClassifyOnly();
+}
+
+function deleteRule(ruleId) {
+  rules = rules.filter(r => r.id !== ruleId);
+  renderRulesTable();
+  recomputeClassifyOnly();
+}
+
+// ---- Chart of accounts modal ----
+function openChartModal(code) {
+  const isNew = !code;
+  const acct = isNew ? { name: "", type: "Expense" } : chart[code];
+
+  const typeOptions = ACCOUNT_TYPES
+    .map(t => `<option value="${t}" ${t === acct.type ? "selected" : ""}>${t}</option>`)
+    .join("");
+
+  showModal(`
+    <h3>${isNew ? "Add Account" : "Edit Account"}</h3>
+    <div class="field">
+      <label>Code *</label>
+      <input type="text" id="mChartCode" value="${escapeHtml(code || "")}" ${isNew ? "" : "disabled"} />
+      ${isNew ? "" : '<div class="muted" style="margin-top:4px">Code cannot be changed after creation.</div>'}
+    </div>
+    <div class="field">
+      <label>Name *</label>
+      <input type="text" id="mChartName" value="${escapeHtml(acct.name)}" />
+    </div>
+    <div class="field">
+      <label>Type *</label>
+      <select id="mChartType">${typeOptions}</select>
+    </div>
+    <div id="mChartError" class="error"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button onclick="saveChartAccount('${code || ""}')">Save</button>
+    </div>
+  `);
+}
+
+function saveChartAccount(code) {
+  const isNew = !code;
+  const errEl = document.getElementById("mChartError");
+  const newCode = document.getElementById("mChartCode").value.trim();
+  const name = document.getElementById("mChartName").value.trim();
+  const type = document.getElementById("mChartType").value;
+
+  if (isNew && !newCode) { errEl.textContent = "Code is required."; return; }
+  if (!name) { errEl.textContent = "Name is required."; return; }
+  if (!type) { errEl.textContent = "Type is required."; return; }
+
+  if (isNew) {
+    if (chart[newCode]) { errEl.textContent = "Code already exists."; return; }
+    const nameDup = Object.values(chart).find(a => a.name.toLowerCase() === name.toLowerCase());
+    if (nameDup) { errEl.textContent = "Name already exists."; return; }
+    chart[newCode] = { name, type };
+  } else {
+    const nameDup = Object.entries(chart).find(([c, a]) => c !== code && a.name.toLowerCase() === name.toLowerCase());
+    if (nameDup) { errEl.textContent = "Name already exists."; return; }
+    chart[code].name = name;
+    chart[code].type = type;
+  }
+
+  closeModal();
+  renderChartTable();
+  renderTypeMapTable();
+  renderRulesTable();
+  recomputeClassifyOnly();
+}
+
+function deleteChartAccount(code) {
+  const rulesUsing = rules.filter(r => r.account === code);
+  const typeMapsUsing = Object.entries(typeMap).filter(([t, c]) => c === code);
+
+  if (rulesUsing.length === 0 && typeMapsUsing.length === 0) {
+    delete chart[code];
+    renderChartTable();
+    recomputeClassifyOnly();
+    return;
+  }
+
+  const msg = `Deleting account ${code} will also:\n` +
+    `• Delete ${rulesUsing.length} rule(s)\n` +
+    `• Reset ${typeMapsUsing.length} type mapping(s) to Uncategorized\n\nContinue?`;
+
+  if (!confirm(msg)) return;
+
+  rules = rules.filter(r => r.account !== code);
+  Object.keys(typeMap).forEach(t => {
+    if (typeMap[t] === code) typeMap[t] = "5700";
+  });
+
+  delete chart[code];
+  renderChartTable();
+  renderRulesTable();
+  renderTypeMapTable();
+  recomputeClassifyOnly();
+}
+
+// ---- Parsed event modal ----
+function openParsedModal(idx) {
+  const row = parsedRows[idx];
+  const event = parsedEvents[idx];
+
+  const typeOptions = EVENT_TYPES
+    .map(t => `<option value="${t}" ${t === event.type ? "selected" : ""}>${t}</option>`)
+    .join("");
+
+  showModal(`
+    <h3>Edit Parsed Event — Row ${idx + 1}</h3>
+    <div class="field">
+      <label>Date</label>
+      <input type="text" value="${escapeHtml(formatDate(row.date))}" disabled />
+    </div>
+    <div class="field">
+      <label>Narration</label>
+      <input type="text" value="${escapeHtml(row.narration)}" disabled />
+    </div>
+    <div class="field">
+      <label>Bank Direction / Amount</label>
+      <input type="text" value="${row.direction} · ${formatMoney(row.amount)}" disabled />
+    </div>
+    <div class="field">
+      <label>Type *</label>
+      <select id="mParsedType">${typeOptions}</select>
+    </div>
+    <div class="field">
+      <label>Counterparty (optional)</label>
+      <input type="text" id="mParsedCp" value="${escapeHtml(event.counterparty || "")}" />
+    </div>
+    <div class="field">
+      <label>Description (optional)</label>
+      <input type="text" id="mParsedDesc" value="${escapeHtml(event.description || "")}" />
+    </div>
+    <div id="mParsedError" class="error"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button onclick="saveParsedEvent(${idx})">Save</button>
+    </div>
+  `);
+}
+
+function saveParsedEvent(idx) {
+  const errEl = document.getElementById("mParsedError");
+  const type = document.getElementById("mParsedType").value;
+  const counterparty = document.getElementById("mParsedCp").value.trim().toUpperCase();
+  const description = document.getElementById("mParsedDesc").value.trim();
+
+  if (!type) { errEl.textContent = "Type is required."; return; }
+
+  const event = parsedEvents[idx];
+  const typeChanged = event.type !== type;
+  const cpChanged = (event.counterparty || "") !== counterparty;
+
+  event.type = type;
+  event.counterparty = counterparty || undefined;
+  event.description = description || undefined;
+
+  closeModal();
+  renderParsedTable();
+
+  if (typeChanged || cpChanged) {
+    recomputeEverything();
+  } else {
+    recomputeClassifyOnly();
+  }
+}
+
+// ---- Type→account modal ----
+function openTypeMapModal(type) {
+  const current = typeMap[type];
+  const accountOptions = Object.keys(chart).sort()
+    .map(code => `<option value="${code}" ${code === current ? "selected" : ""}>${code} · ${escapeHtml(chart[code].name)}</option>`)
+    .join("");
+
+  showModal(`
+    <h3>Edit Type Mapping</h3>
+    <div class="field">
+      <label>Type</label>
+      <input type="text" value="${escapeHtml(type)}" disabled />
+    </div>
+    <div class="field">
+      <label>Account *</label>
+      <select id="mTypeMapAcct">${accountOptions}</select>
+    </div>
+    <div id="mTypeMapError" class="error"></div>
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button onclick="saveTypeMap('${type}')">Save</button>
+    </div>
+  `);
+}
+
+function saveTypeMap(type) {
+  const errEl = document.getElementById("mTypeMapError");
+  const account = document.getElementById("mTypeMapAcct").value;
+  if (!account || !chart[account]) { errEl.textContent = "Valid account required."; return; }
+
+  typeMap[type] = account;
+  closeModal();
+  renderTypeMapTable();
+  recomputeClassifyOnly();
+}
+
+// ================================================================
+// CSV EXPORTS
+// ================================================================
+function downloadCSV(filename, rows) {
+  const csv = rows.map(row =>
+    row.map(cell => {
+      const s = String(cell == null ? "" : cell);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(",")
+  ).join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportSource() {
+  const rows = [["#", "Date", "Narration", "Direction", "Amount"]];
+  parsedRows.forEach((r, i) => {
+    rows.push([i + 1, formatDate(r.date), r.narration, r.direction, r.amount]);
+  });
+  downloadCSV("source.csv", rows);
+}
+
+function exportParsed() {
+  const rows = [["#", "Date", "Type", "Counterparty", "Description", "Direction", "Amount"]];
+  parsedRows.forEach((r, i) => {
+    const e = parsedEvents[i];
+    rows.push([i + 1, formatDate(r.date), e.type, e.counterparty || "", e.description || e.merchant || "", r.direction, r.amount]);
+  });
+  downloadCSV("parsed-events.csv", rows);
+}
+
+function exportPostings() {
+  const rows = [["Event #", "Date", "Account Code", "Account Name", "Reason", "Row", "Debit", "Credit"]];
+  postings.forEach((post, idx) => {
+    const date = formatDate(post.group.anchorRow.date);
+    post.lines.forEach(l => {
+      rows.push([
+        idx + 1,
+        date,
+        l.code,
+        l.name,
+        l.reason,
+        l.rowNum,
+        l.side === "DEBIT" ? l.amount : "",
+        l.side === "CREDIT" ? l.amount : ""
+      ]);
+    });
+  });
+  downloadCSV("postings.csv", rows);
+}
+
+function exportTrial() {
+  const rows = [["Code", "Account", "Debit", "Credit"]];
+  let td = 0, tc = 0;
+  Object.entries(trialBalance).sort().forEach(([code, t]) => {
+    const net = t.debit - t.credit;
+    const d = net > 0 ? net : 0;
+    const c = net < 0 ? -net : 0;
+    td += d; tc += c;
+    rows.push([code, t.name, d || "", c || ""]);
+  });
+  rows.push(["", "TOTAL", td, tc]);
+  downloadCSV("trial-balance.csv", rows);
+}
+
+function exportRunning() {
+  const rows = [["Account Code", "Account Name", "Date", "Row", "Reason", "Debit", "Credit", "Balance"]];
+  Object.entries(runningBalances).sort().forEach(([code, acct]) => {
+    const meta = chart[code] || { name: acct.name };
+    acct.entries.forEach(e => {
+      rows.push([code, meta.name, e.date, e.rowNum, e.reason, e.debit || "", e.credit || "", e.balance]);
+    });
+  });
+  downloadCSV("running-balances.csv", rows);
+}
+
+// ================================================================
+// COLUMN MAPPER
+// ================================================================
+const REQUIRED_FIELDS = [
+  { key: "date",      label: "Date" },
+  { key: "narration", label: "Transaction Details / Narration" },
+  { key: "debit",     label: "Debit / Withdrawal column" },
+  { key: "credit",    label: "Credit / Lodgement column" }
+];
+
+function renderMapper() {
+  document.getElementById("mapCard").style.display = "block";
+  const mapFields = document.getElementById("mapFields");
+  mapFields.innerHTML = "";
+
+  REQUIRED_FIELDS.forEach(f => {
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    const lbl = document.createElement("label");
+    lbl.textContent = f.label;
+    const sel = document.createElement("select");
+    sel.id = "map_" + f.key;
+    const guess = guessHeader(f.key);
+    headers.forEach((h, i) => {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = h || `(column ${i + 1})`;
+      if (i === guess) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    wrap.appendChild(lbl);
+    wrap.appendChild(sel);
+    mapFields.appendChild(wrap);
+  });
+}
+
+function guessHeader(field) {
+  const map = {
+    date:      ["date", "post date", "value date", "trans date"],
+    narration: ["narration", "description", "transaction details", "details", "narrative"],
+    debit:     ["debit", "debits", "withdrawal", "withdrawals", "money out", "amount out"],
+    credit:    ["credit", "credits", "lodgement", "lodgements", "deposit", "money in", "amount in"]
+  };
+  const targets = map[field] || [];
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i].toLowerCase().trim();
+    if (targets.some(t => h === t || h.includes(t))) return i;
+  }
+  return -1;
+}
+
+// ================================================================
+// EVENT LISTENERS
+// ================================================================
+document.getElementById("fileInput").addEventListener("change", () => {
+  document.getElementById("loadBtn").disabled = !document.getElementById("fileInput").files.length;
+  document.getElementById("fileError").textContent = "";
+});
+
+document.getElementById("loadBtn").addEventListener("click", () => {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      let headerIdx = rows.findIndex(r => r.some(c => String(c).trim() !== ""));
+      if (headerIdx === -1) throw new Error("Empty file");
+      headers = rows[headerIdx].map(h => String(h).trim());
+      workbookRows = rows.slice(headerIdx + 1).filter(r =>
+        r.some(c => String(c).trim() !== "")
+      );
+      renderMapper();
+    } catch (err) {
+      document.getElementById("fileError").textContent = "Could not read file: " + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+document.getElementById("processBtn").addEventListener("click", () => {
+  const colDate      = +document.getElementById("map_date").value;
+  const colNarration = +document.getElementById("map_narration").value;
+  const colDebit     = +document.getElementById("map_debit").value;
+  const colCredit    = +document.getElementById("map_credit").value;
+  const bank         = document.getElementById("bankSelect").value;
+  const parser       = PARSERS[bank];
+
+  parsedRows = workbookRows.map((r, i) => {
+    const debitRaw = parseAmount(r[colDebit]);
+    const creditRaw = parseAmount(r[colCredit]);
+    return {
+      _rowIndex: i,
+      date: r[colDate] instanceof Date ? r[colDate] : String(r[colDate] || ""),
+      narration: String(r[colNarration] || "").trim(),
+      debit: debitRaw,
+      credit: creditRaw,
+      direction: debitRaw > 0 ? "OUT" : (creditRaw > 0 ? "IN" : "NONE"),
+      amount: debitRaw > 0 ? debitRaw : creditRaw
+    };
+  }).filter(r => r.narration && r.amount > 0);
+
+  parsedEvents = parsedRows.map(r => {
+    const p = parser(r.narration);
+    return { ...p };
+  });
+
+  document.getElementById("tabsWrap").style.display = "block";
+
+  renderSourceTable();
+  renderParsedTable();
+  renderRulesTable();
+  renderChartTable();
+  renderTypeMapTable();
+
+  recomputeEverything();
+  document.querySelector('.tab[data-tab="source"]').click();
+});
+
+// Refresh-only listeners
+document.getElementById("parsedSearch").addEventListener("input", renderParsedTable);
+document.getElementById("parsedTypeFilter").addEventListener("change", renderParsedTable);
+document.getElementById("parsedDirFilter").addEventListener("change", renderParsedTable);
+document.getElementById("postingFilter").addEventListener("change", renderPostings);
+
+// Add buttons
+document.getElementById("addRuleBtn").addEventListener("click", () => openRuleModal(null));
+document.getElementById("addChartBtn").addEventListener("click", () => openChartModal(null));
+
+// Export buttons
+document.getElementById("exportSource").addEventListener("click", exportSource);
+document.getElementById("exportParsed").addEventListener("click", exportParsed);
+document.getElementById("exportPostings").addEventListener("click", exportPostings);
+document.getElementById("exportTrial").addEventListener("click", exportTrial);
+document.getElementById("exportRunning").addEventListener("click", exportRunning);
+</script>
+</body>
+</html>
